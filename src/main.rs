@@ -5,14 +5,12 @@ mod processor;
 mod recorder;
 
 use cli::Cli;
-use frame::{Frame, FrameType};
 use processor::OutputProcessor;
 use pty::PtySession;
 use recorder::RecordingManager;
 
 use anyhow::Result;
 use clap::Parser;
-use std::time::Duration;
 use std::io::{self, Write};
 use tokio::signal;
 use tracing::{error, info, Level};
@@ -36,7 +34,7 @@ async fn main() -> Result<()> {
     info!("Command: {} {:?}", cli.command, cli.args);
 
     // Create PTY session
-    let mut session = PtySession::new(
+    let session = PtySession::new(
         &cli.command,
         &cli.args,
         cli.cols,
@@ -63,26 +61,19 @@ async fn main() -> Result<()> {
     // Start background tasks
     let mut stdout = io::stdout();
     
-    // Start PTY reading task
+    // Split session into runner and receiver
+    let (runner, mut frame_rx) = session.split();
+    
+    // Start PTY session background task
     let mut session_task = tokio::spawn(async move {
-        session.run().await
-    });
-    
-    // For now, create a minimal frame source for testing
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Frame>();
-    
-    // Simple test frame generator
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let _ = tx.send(Frame::new(FrameType::Stdout).with_data("Hello from SpecterTTY!\n".to_string()));
-        let _ = tx.send(Frame::new(FrameType::Exit).with_exit_code(0));
+        runner.run().await
     });
     
     // Main event loop
     loop {
         tokio::select! {
-            // Handle frames
-            frame = rx.recv() => {
+            // Handle frames from PTY
+            frame = frame_rx.recv() => {
                 match frame {
                     Some(frame) => {
                         // Process frame through token processor

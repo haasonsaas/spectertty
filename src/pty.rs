@@ -194,6 +194,120 @@ impl PtySession {
     pub fn is_alive(&mut self) -> bool {
         self.child.try_wait().unwrap_or(None).is_none()
     }
+
+    pub fn split(self) -> (PtyRunner, mpsc::UnboundedReceiver<Frame>) {
+        let PtySession {
+            pty_pair,
+            child,
+            frame_tx,
+            frame_rx,
+            prompt_regexes,
+            idle_timeout,
+            last_activity,
+            buffer,
+            current_line,
+        } = self;
+
+        let runner = PtyRunner {
+            pty_pair,
+            child,
+            frame_tx,
+            prompt_regexes,
+            idle_timeout,
+            last_activity,
+            buffer,
+            current_line,
+        };
+
+        (runner, frame_rx)
+    }
+}
+
+pub struct PtyRunner {
+    pty_pair: PtyPair,
+    child: Box<dyn Child + Send + Sync>,
+    frame_tx: mpsc::UnboundedSender<Frame>,
+    prompt_regexes: Vec<Regex>,
+    idle_timeout: Duration,
+    last_activity: Instant,
+    buffer: Vec<u8>,
+    current_line: String,
+}
+
+impl PtyRunner {
+    pub async fn run(mut self) -> Result<()> {
+        let mut reader = self.pty_pair.master.try_clone_reader()?;
+        let frame_tx = self.frame_tx.clone();
+        
+        // Spawn output reader task
+        let output_task = tokio::spawn(async move {
+            let mut buffer = [0u8; 8192];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => {
+                        debug!("PTY output stream closed");
+                        break;
+                    }
+                    Ok(n) => {
+                        let data = String::from_utf8_lossy(&buffer[..n]).to_string();
+                        let frame = Frame::new(FrameType::Stdout).with_data(data);
+                        
+                        if let Err(e) = frame_tx.send(frame) {
+                            error!("Failed to send stdout frame: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading from PTY: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Check child process status periodically
+        let mut interval = tokio::time::interval(Duration::from_millis(100));
+        
+        loop {
+            tokio::select! {
+                // Check for idle timeout
+                _ = sleep(self.idle_timeout) => {
+                    if self.last_activity.elapsed() >= self.idle_timeout {
+                        let frame = Frame::new(FrameType::Idle)
+                            .with_duration(self.last_activity.elapsed().as_millis() as u64);
+                        if let Err(e) = self.frame_tx.send(frame) {
+                            error!("Failed to send idle frame: {}", e);
+                            break;
+                        }
+                        self.last_activity = Instant::now();
+                    }
+                }
+                
+                // Check child process status
+                _ = interval.tick() => {
+                    match self.child.try_wait() {
+                        Ok(Some(exit_status)) => {
+                            let code = if exit_status.success() { 0 } else { 1 };
+                            let frame = Frame::new(FrameType::Exit).with_exit_code(code);
+                            let _ = self.frame_tx.send(frame);
+                            info!("Child process exited with code: {}", code);
+                            break;
+                        }
+                        Ok(None) => {
+                            // Still running
+                        }
+                        Err(e) => {
+                            error!("Error checking child status: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        output_task.abort();
+        Ok(())
+    }
 }
 
 impl Stream for PtySession {
