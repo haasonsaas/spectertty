@@ -37,13 +37,13 @@ cargo build --release
 ./target/release/spectertty --json echo "Hello World"
 
 # With token optimization
-./target/release/spectertty --token-mode compact npm install
+./target/release/spectertty --token-mode compact -- npm install
 
 # With session recording
-./target/release/spectertty --json --record session.cast ls -la
+./target/release/spectertty --json --record session.cast -- ls -la
 
 # Multiple commands
-./target/release/spectertty --json bash -c "echo 'Step 1'; sleep 1; echo 'Step 2'"
+./target/release/spectertty --json -- bash -c "echo 'Step 1'; sleep 1; echo 'Step 2'"
 ```
 
 ---
@@ -124,13 +124,13 @@ spectertty [OPTIONS] <COMMAND> [ARGS]...
 
 ```bash
 # AI agent running a deployment
-spectertty --json --token-mode compact kubectl apply -f deployment.yaml
+spectertty --json --token-mode compact -- kubectl apply -f deployment.yaml
 
 # AI agent debugging an application  
-spectertty --json --record debug-session.cast docker logs app-container
+spectertty --json --record debug-session.cast -- docker logs app-container
 
 # AI agent running tests
-spectertty --json --token-mode compact npm test
+spectertty --json --token-mode compact -- npm test
 ```
 
 ### Session Analysis
@@ -140,18 +140,18 @@ spectertty --json --token-mode compact npm test
 spectertty --record troubleshooting.cast --json bash
 
 # Compare outputs across runs
-spectertty --json pytest tests/ > run1.json
-spectertty --json pytest tests/ > run2.json
+spectertty --json -- pytest tests/ > run1.json
+spectertty --json -- pytest tests/ > run2.json
 ```
 
 ### CI/CD Integration
 
 ```bash
 # Structured output for build pipelines
-spectertty --json --token-mode compact make build
+spectertty --json --token-mode compact -- make build
 
 # Record deployment sessions
-spectertty --record "deploy-$(date +%Y%m%d).cast" --json ./deploy.sh
+spectertty --record "deploy-$(date +%Y%m%d).cast" --json -- ./deploy.sh
 ```
 
 ---
