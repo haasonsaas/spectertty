@@ -1,0 +1,77 @@
+[package]
+name = "spectertty"
+version = "0.1.0"
+edition = "2021"
+authors = ["SpecterTTY Team"]
+description = "AI-Native Terminal Automation Platform"
+license = "Apache-2.0"
+repository = "https://github.com/spectertty/spectertty"
+keywords = ["pty", "terminal", "automation", "ai", "json"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "spectertty"
+path = "src/main.rs"
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1.0", features = ["full"] }
+tokio-util = "0.7"
+
+# CLI and argument parsing
+clap = { version = "4.0", features = ["derive", "env"] }
+
+# JSON serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# PTY handling
+portable-pty = "0.8"
+
+# Process management
+nix = "0.27"
+
+# Async streams
+futures = "0.3"
+futures-util = "0.3"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Regex for prompt matching
+regex = "1.0"
+
+# Base64 encoding for binary data
+base64 = "0.21"
+
+# Compression (optional)
+zstd = { version = "0.12", optional = true }
+
+# Unix socket support
+tokio-uds = { version = "0.2", optional = true }
+
+# State persistence
+sled = { version = "0.34", optional = true }
+
+[features]
+default = ["compression", "persistence"]
+compression = ["zstd"]
+persistence = ["sled"]
+unix-sockets = ["tokio-uds"]
+
+[dev-dependencies]
+tempfile = "3.0"
+criterion = "0.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
